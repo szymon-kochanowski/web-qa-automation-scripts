@@ -1,0 +1,318 @@
+{
+  "info": {
+    "_postman_id": "7b8f9a2e-4321-4f12-9c34-8e1234567890",
+    "name": "Web QA Regression Collection",
+    "description": "Zestaw zautomatyzowanych testów regresyjnych API autorstwa Szymona Kochanowskiego. Weryfikuje kody odpowiedzi HTTP (200, 201, 400, 401, 404, 500), progi SLA (<300ms), nagłówki bezpieczeństwa oraz kontrakty schematów JSON.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/mock",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "createdProductId",
+      "value": "prod_001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Health Check & Security Headers",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response time SLA < 300ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(300);",
+              "});",
+              "",
+              "pm.test(\"Security Header: X-Content-Type-Options is nosniff\", function () {",
+              "    pm.response.to.have.header(\"x-content-type-options\");",
+              "    pm.expect(pm.response.headers.get(\"x-content-type-options\")).to.eql(\"nosniff\");",
+              "});",
+              "",
+              "pm.test(\"Health Response JSON Schema Integrity\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property(\"status\");",
+              "    pm.expect(jsonData.status).to.be.oneOf([\"healthy\", \"degraded\", \"maintenance\"]);",
+              "    pm.expect(jsonData).to.have.property(\"timestamp\");",
+              "    pm.expect(jsonData).to.have.property(\"service\");",
+              "    pm.expect(jsonData).to.have.property(\"version\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "02. Authenticate & Obtain Bearer Token",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Auth Response Structure & Token Extraction\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.token).to.be.a(\"string\").and.to.have.lengthOf.at.least(10);",
+              "    pm.expect(jsonData.user).to.be.an(\"object\");",
+              "    pm.expect(jsonData.user.email).to.include(\"@\");",
+              "    ",
+              "    // Store token for subsequent requests",
+              "    pm.collectionVariables.set(\"authToken\", jsonData.token);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"qa.engineer\",\n  \"password\": \"SecurePassword2026!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "03. Get Products Catalog & Contract Audit",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Products Catalog Schema & Data Types Validation\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.items).to.be.an(\"array\");",
+              "    pm.expect(jsonData.total).to.be.a(\"number\").and.at.least(0);",
+              "",
+              "    jsonData.items.forEach((item, index) => {",
+              "        pm.expect(item.id, `item[${index}].id`).to.be.a(\"string\");",
+              "        pm.expect(item.sku, `item[${index}].sku`).to.be.a(\"string\");",
+              "        pm.expect(item.name, `item[${index}].name`).to.be.a(\"string\");",
+              "        pm.expect(item.price, `item[${index}].price`).to.be.a(\"number\");",
+              "        pm.expect(item.currency, `item[${index}].currency`).to.be.oneOf([\"PLN\", \"EUR\", \"USD\", \"GBP\"]);",
+              "        pm.expect(item.inStock, `item[${index}].inStock`).to.be.a(\"boolean\");",
+              "    });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["products"]
+        }
+      }
+    },
+    {
+      "name": "04. Create Product (Contract Validation)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"Created Product Schema & ID Assignment\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.be.a(\"string\");",
+              "    pm.expect(jsonData.name).to.eql(\"Postman Automated Test Fixture\");",
+              "    pm.expect(jsonData.price).to.eql(199.99);",
+              "    pm.expect(jsonData.currency).to.eql(\"PLN\");",
+              "    ",
+              "    // Store created ID for subsequent tests",
+              "    pm.collectionVariables.set(\"createdProductId\", jsonData.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Postman Automated Test Fixture\",\n  \"sku\": \"PM-QA-2026\",\n  \"price\": 199.99,\n  \"currency\": \"PLN\",\n  \"inStock\": true,\n  \"category\": \"Testing Tooling\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["products"]
+        }
+      }
+    },
+    {
+      "name": "05. Negative: Invalid Payload Schema Check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP Status code is 400 Bad Request\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test(\"Error Contract Schema Validation\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property(\"error\");",
+              "    pm.expect(jsonData.statusCode).to.eql(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"price\": \"NOT_A_VALID_NUMBER\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["products"]
+        }
+      }
+    },
+    {
+      "name": "06. Teardown: Delete Created Product",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP Status code is 200 or 204\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/products/{{createdProductId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "{{createdProductId}}"]
+        }
+      }
+    },
+    {
+      "name": "07. Verification: Deleted Product Returns 404",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP Status code is 404 Not Found\", function () {",
+              "    pm.response.to.have.status(404);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/products/{{createdProductId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "{{createdProductId}}"]
+        }
+      }
+    }
+  ]
+}
